@@ -38,3 +38,7 @@ backend/eval/out/
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated native projects (created by "npx expo prebuild"; do not commit)
+frontend/ios/
+frontend/android/

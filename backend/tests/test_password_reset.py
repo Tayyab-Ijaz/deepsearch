@@ -128,7 +128,8 @@ def test_validation(env):
     assert ask(c, "not-an-email").status_code == 422
     assert reset(c, "12345").status_code == 422
     assert reset(c, "abcdef").status_code == 422
-    assert reset(c, "123456", "short").status_code == 422
+    short = reset(c, "123456", "short")
+    assert short.status_code == 422 and short.json()["detail"] == "Use at least 8 characters for the password."
 
 
 def test_unavailable_when_email_is_not_configured(env, monkeypatch):
@@ -162,3 +163,14 @@ def test_mailer_posts_to_resend_without_leaking_the_key(monkeypatch):
     assert seen["url"] == "https://api.resend.com/emails" and seen["auth"] == "Bearer re_real_looking_key_123"
     assert seen["body"]["to"] == ["a@example.com"] and "123456" in seen["body"]["text"]
     assert seen["body"]["from"] == "DeepSearch AI <info@wellminddatasolutions.com>"
+
+
+def test_public_pages_for_the_app_store(env):
+    c, _ = env
+    for path, words in (("/privacy", ("Privacy Policy", "Resend", "Serper", "Delete Account")),
+                        ("/terms", ("Terms of Use", "identity verification")),
+                        ("/support", ("info@wellminddatasolutions.com", "Forgot password"))):
+        r = c.get(path)
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/html"), path
+        assert all(w in r.text for w in words), path
+        assert "info@wellminddatasolutions.com" in r.text

@@ -8,13 +8,14 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
 from .config import settings
 from .models import (DeleteAccountRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest, RegisterRequest,
                      ResetPasswordRequest, SavedPersonRequest, SearchRequest, SummaryRequest, UsernameRequest)
+from . import pages
 from .services import accounts, mailer, metrics, summarizer, username_prober
 from .services.accounts import AuthError
 from .services.providers import ProviderError
@@ -66,7 +67,7 @@ async def validation_handler(_: Request, e: RequestValidationError):
     first = e.errors()[0] if e.errors() else {}
     msg = str(first.get("msg", "Check your input.")).removeprefix("Value error, ")
     loc = first.get("loc", ())
-    if "password" in loc and first.get("type") == "string_too_short":
+    if any("password" in str(part) for part in loc) and first.get("type") == "string_too_short":
         msg = "Use at least 8 characters for the password."
     return JSONResponse({"detail": msg}, status_code=422)
 
@@ -94,6 +95,26 @@ async def _log_run(*args) -> None:
         await run_in_threadpool(metrics.log_run, *args)
     except Exception:
         pass
+
+
+# ---------------- public pages (the App Store needs working privacy and support URLs) ----------------
+def _page(title: str, body: str) -> HTMLResponse:
+    return HTMLResponse(pages.render(title, body), headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_page():
+    return _page("Privacy Policy", pages.PRIVACY)
+
+
+@app.get("/terms", include_in_schema=False)
+def terms_page():
+    return _page("Terms of Use", pages.TERMS)
+
+
+@app.get("/support", include_in_schema=False)
+def support_page():
+    return _page("Support", pages.SUPPORT)
 
 
 # ---------------- public ----------------
