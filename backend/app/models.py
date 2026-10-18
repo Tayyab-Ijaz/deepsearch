@@ -101,10 +101,6 @@ class DeleteAccountRequest(BaseModel):
     password: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
-class FirebaseSignInRequest(BaseModel):
-    id_token: str = Field(min_length=40, max_length=8192)
-
-
 class Result(BaseModel):
     name: str
     platform: str

@@ -1,4 +1,4 @@
-export type User = { id: number; email: string; display_name: string | null; auth_provider?: 'password' | 'google' };
+export type User = { id: number; email: string; display_name: string | null; auth_provider?: 'password' };
 export type AuthSession = { user: User; access_token: string; refresh_token: string; expires_in: number };
 export type UsageCount = { used: number; limit: number };
 export type Usage = { searches: UsageCount; summaries: UsageCount };

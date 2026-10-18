@@ -88,11 +88,6 @@ def login(email: str, password: str) -> dict:
     return firebase_store.login(email, password)
 
 
-def login_with_firebase_token(id_token: str) -> dict:
-    from . import firebase_store
-    return firebase_store.login_with_firebase_token(id_token)
-
-
 def save_person(user_id: int, person: dict[str, Any]) -> dict[str, Any]:
     from . import firebase_store
     return firebase_store.save_person(user_id, person)

@@ -149,10 +149,10 @@ export default function AccountScreen() {
       <ConfirmModal
         visible={dialog === 'delete'}
         title="Delete Account"
-        message={user?.auth_provider === 'google' ? 'This permanently deletes your account and its data.' : 'This permanently deletes your account. Enter your password to confirm.'}
+        message="This permanently deletes your account. Enter your password to confirm."
         confirmLabel="Delete"
         destructive
-        passwordLabel={user?.auth_provider === 'google' ? undefined : 'Password'}
+        passwordLabel="Password"
         busy={busy}
         error={error}
         onConfirm={confirm}

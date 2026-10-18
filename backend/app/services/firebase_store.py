@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 _db = None
 _firestore = None
 _firebase_admin = None
-_firebase_auth = None
 _firebase_app = None
 
 
@@ -37,17 +36,19 @@ def _token_hash(token: str) -> str:
 
 
 def init() -> None:
-    global _db, _firestore, _firebase_admin, _firebase_auth, _firebase_app
+    global _db, _firestore, _firebase_admin, _firebase_app
     if _db is not None:
         return
     configured()
     try:
         import firebase_admin
-        from firebase_admin import auth, credentials, firestore
+        from firebase_admin import credentials, firestore
     except ImportError as exc:
         raise RuntimeError("Install backend requirements to enable Firebase Firestore.") from exc
 
     credential_value = settings.firebase_credentials.strip()
+    if len(credential_value) > 1 and credential_value[0] == credential_value[-1] and credential_value[0] in "'\"":
+        credential_value = credential_value[1:-1].strip()  # an importer that kept the wrapping quotes
     if credential_value.startswith("{"):
         # Vercel stores the service-account JSON as an encrypted environment variable.
         # Local development can continue to provide a path to the JSON file instead.
@@ -76,7 +77,6 @@ def init() -> None:
         )
     _firestore = firestore
     _firebase_admin = firebase_admin
-    _firebase_auth = auth
     _firebase_app = app
     _db = firestore.client(app=app)
 
@@ -143,65 +143,6 @@ def login(email: str, password: str) -> dict:
     if not user or not ok:
         raise AuthError("Email or password is incorrect.")
     return _session(user)
-
-
-def login_with_firebase_token(token: str) -> dict:
-    from .accounts import AuthError
-
-    try:
-        claims = _firebase_auth.verify_id_token(token, app=_firebase_app, check_revoked=True)
-    except Exception as exc:
-        log.info("Firebase ID token verification failed: %s", type(exc).__name__)
-        raise AuthError("Firebase sign-in could not be verified. Please try again.") from exc
-
-    email = str(claims.get("email", "")).strip().lower()
-    subject = str(claims.get("uid", ""))
-    verified = claims.get("email_verified") is True or str(claims.get("email_verified", "")).lower() == "true"
-    provider = (claims.get("firebase") or {}).get("sign_in_provider")
-    if not email or not subject or not verified or provider != "google.com":
-        raise AuthError("Continue with a verified Google account through Firebase.")
-
-    uid_ref = _db.collection("firebase_uid_index").document(hashlib.sha256(subject.encode()).hexdigest())
-    email_ref = _db.collection("email_index").document(_email_id(email))
-    counter_ref = _db.collection("_system").document("user_id_counter")
-    transaction = _db.transaction()
-
-    @_firestore.transactional
-    def find_or_create(tx):
-        linked = uid_ref.get(transaction=tx)
-        if linked.exists:
-            user_ref = _db.collection("users").document(str(linked.to_dict()["user_id"]))
-            user_snapshot = user_ref.get(transaction=tx)
-            if user_snapshot.exists:
-                return user_snapshot.to_dict()
-
-        existing_email = email_ref.get(transaction=tx)
-        if existing_email.exists:
-            user_ref = _db.collection("users").document(str(existing_email.to_dict()["user_id"]))
-            user_snapshot = user_ref.get(transaction=tx)
-            if not user_snapshot.exists:
-                raise AuthError("This account needs support before it can be used.", 409)
-            user = user_snapshot.to_dict()
-            if user.get("firebase_uid") and user["firebase_uid"] != subject:
-                raise AuthError("This email is linked to a different Firebase account.", 409)
-            user["firebase_uid"] = subject
-            if not user.get("password_hash"):
-                user["auth_provider"] = "google"
-            tx.set(user_ref, user)
-            tx.set(uid_ref, {"user_id": int(user["id"])})
-            return user
-
-        counter = counter_ref.get(transaction=tx)
-        user_id = int(counter.to_dict().get("last_id", 0) if counter.exists else 0) + 1
-        user = {"id": user_id, "email": email, "display_name": claims.get("name"), "password_hash": None,
-                "auth_provider": "google", "firebase_uid": subject, "created_at": time.time()}
-        tx.set(counter_ref, {"last_id": user_id})
-        tx.set(_db.collection("users").document(str(user_id)), user)
-        tx.set(email_ref, {"user_id": user_id})
-        tx.set(uid_ref, {"user_id": user_id})
-        return user
-
-    return _session(find_or_create(transaction))
 
 
 def refresh(refresh_token: str) -> dict:

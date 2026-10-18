@@ -1,7 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, setSessionExpiredHandler } from './api';
-import { getFirebaseAuth } from './firebase';
-import { signOut as firebaseSignOut } from 'firebase/auth';
 import { clearTokens, getRefreshToken, hasTokens, loadTokens, saveTokens } from './tokens';
 import type { AuthSession, FeaturesResponse, MeResponse, Usage, User } from './types';
 
@@ -13,7 +11,6 @@ type AuthContextValue = {
   usage: Usage | null;
   aiSummary: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  googleSignIn: (idToken: string) => Promise<void>;
   register: (email: string, password: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: (password?: string) => Promise<void>;
@@ -97,14 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [finishSignIn],
   );
 
-  const googleSignIn = useCallback(
-    async (idToken: string) => {
-      const session = await api.post<AuthSession>('api/auth/firebase', { id_token: idToken }, false);
-      await finishSignIn(session);
-    },
-    [finishSignIn],
-  );
-
   const signOut = useCallback(async () => {
     const refresh = getRefreshToken();
     if (refresh) {
@@ -115,7 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     await clearTokens();
-    try { await firebaseSignOut(getFirebaseAuth()); } catch { /* email/password sessions may not have Firebase Auth */ }
     reset();
   }, [reset]);
 
@@ -139,8 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, user, usage, aiSummary, signIn, googleSignIn, register, signOut, deleteAccount, refreshUsage }),
-    [status, user, usage, aiSummary, signIn, googleSignIn, register, signOut, deleteAccount, refreshUsage],
+    () => ({ status, user, usage, aiSummary, signIn, register, signOut, deleteAccount, refreshUsage }),
+    [status, user, usage, aiSummary, signIn, register, signOut, deleteAccount, refreshUsage],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

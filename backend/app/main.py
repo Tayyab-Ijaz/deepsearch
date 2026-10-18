@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
 from .config import settings
-from .models import (DeleteAccountRequest, FirebaseSignInRequest, LoginRequest, RefreshRequest, RegisterRequest,
+from .models import (DeleteAccountRequest, LoginRequest, RefreshRequest, RegisterRequest,
                      SavedPersonRequest, SearchRequest, SummaryRequest, UsernameRequest)
 from .services import accounts, metrics, summarizer, username_prober
 from .services.accounts import AuthError
@@ -113,19 +113,6 @@ def login(req: LoginRequest, request: Request):
     accounts.check_rate(key)
     try:
         out = accounts.login(req.email, req.password)
-    except AuthError:
-        accounts.note_failure(key)
-        raise
-    accounts.clear_failures(key)
-    return out
-
-
-@app.post("/api/auth/firebase")
-def firebase_login(req: FirebaseSignInRequest, request: Request):
-    key = f"firebase:{_ip(request)}"
-    accounts.check_rate(key)
-    try:
-        out = accounts.login_with_firebase_token(req.id_token)
     except AuthError:
         accounts.note_failure(key)
         raise

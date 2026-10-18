@@ -1,6 +1,6 @@
 # Firebase setup
 
-Cloud Firestore is the only persistent database. Firebase Admin credentials are required at startup; the API does not fall back to local SQLite. Account records, refresh tokens, daily usage, and aggregate run metrics are stored in Firestore. The service-account key stays on the backend and must never be placed in the mobile app.
+Cloud Firestore is the only persistent database. Firebase Admin credentials are required at startup; the API does not fall back to local SQLite. Account records, refresh tokens, daily usage, saved profiles, login-attempt counters and aggregate run metrics are stored in Firestore. The service-account key stays on the backend and must never be placed in the mobile app.
 
 ## Firestore and backend Admin SDK
 
@@ -10,14 +10,9 @@ Cloud Firestore is the only persistent database. Firebase Admin credentials are 
 4. Set `FIREBASE_PROJECT_ID` and `FIREBASE_CREDENTIALS=secrets/firebase-service-account.json` in `backend/.env`.
 5. Install `backend/requirements.txt` and restart the API.
 
-## Google Continue with Firebase Authentication
+## Sign-in
 
-1. In Firebase Console, open **Authentication → Sign-in method** and enable **Google**. Set the support email and save.
-2. In **Project settings → General → Your apps**, register a **Web app** if there is not one already. Copy its Firebase web config values (`apiKey`, `authDomain`, `projectId`, and `appId`) to `frontend/.env` as `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, and `EXPO_PUBLIC_FIREBASE_APP_ID`.
-3. Restart Expo after changing environment values. The web app uses Firebase's Google provider popup; no separate Google OAuth client ID is entered in the backend.
-4. The mobile app exchanges its Google credential with Firebase, then sends a Firebase ID token to the API. The API verifies that token with Firebase Admin before creating a Firestore-backed application session.
-
-For native iOS/Android builds, Expo's browser-based Google flow also needs the platform OAuth client IDs in `frontend/.env` (`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` plus the matching Android or iOS client ID). These are public client identifiers, not client secrets, and are not backend settings. For an Expo Go browser session, Google OAuth redirect restrictions may require a development build with the app's configured scheme.
+The app uses email and password only. Accounts, password hashes and sessions are handled by this API and stored in Firestore; Firebase Authentication is not used, so no sign-in provider needs to be enabled in the Firebase console and the mobile app needs no Firebase configuration.
 
 Do not paste the service-account JSON or private keys into chat or commit them. Firestore client rules should deny direct app access; reads and writes go through the API.
 

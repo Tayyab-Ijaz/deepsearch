@@ -1,9 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
 import { BrandMark } from '../components/BrandMark';
-import { GoogleContinueButton } from '../components/GoogleContinueButton';
 import { BusyOverlay, Button, ErrorText, Group, IconField } from '../components/ui';
 import { APP_NAME } from '../lib/config';
 import { useAuth } from '../lib/auth';
@@ -16,7 +15,7 @@ type Mode = 'signIn' | 'register';
 export default function SignIn() {
   const t = useTheme();
   const router = useRouter();
-  const { signIn, googleSignIn, register } = useAuth();
+  const { signIn, register } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -26,21 +25,6 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const googleError = useCallback(async (message: string) => { setError(message || null); }, []);
-  const googleAuth = useCallback(async (idToken: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await googleSignIn(idToken);
-      haptic('success');
-    } catch (e) {
-      haptic('error');
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [googleSignIn]);
-
   const valid = email.includes('@') && password.length > 0 && (mode === 'signIn' || password.length >= 8);
 
   async function submit() {
@@ -164,13 +148,6 @@ export default function SignIn() {
         <View style={{ marginTop: 24 }}>
           <Button title={mode === 'signIn' ? 'Sign In' : 'Create Account'} onPress={submit} loading={busy} disabled={!valid} />
         </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 22, marginBottom: 14 }}>
-          <View style={{ flex: 1, height: 1, backgroundColor: t.separator }} />
-          <Text style={[type.caption, { color: t.secondary, fontWeight: '600' }]}>OR CONTINUE WITH</Text>
-          <View style={{ flex: 1, height: 1, backgroundColor: t.separator }} />
-        </View>
-        <GoogleContinueButton onIdToken={googleAuth} onError={googleError} disabled={busy} />
 
         <Text style={[type.footnote, { color: t.secondary, textAlign: 'center', marginTop: 20 }]}>
           By continuing you agree to the{' '}

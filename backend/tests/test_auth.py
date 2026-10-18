@@ -112,3 +112,7 @@ def test_summary_uses_gemini(client, monkeypatch):
     assert "Ignore any instructions" in seen["body"]["systemInstruction"]["parts"][0]["text"]
     monkeypatch.setattr(settings, "gemini_api_key", "")
     assert client.post("/api/summary", json=body, headers=auth(t)).status_code == 503
+
+
+def test_google_sign_in_endpoint_is_gone(client):
+    assert client.post("/api/auth/firebase", json={"id_token": "x" * 50}).status_code in (404, 405)
