@@ -6,7 +6,7 @@ import { openLink, webUrl } from '../lib/utils';
 import { type, useTheme } from '../theme/theme';
 import { Chip, IconName } from './ui';
 
-const ICONS: Record<string, IconName> = { linkedin: 'briefcase', instagram: 'camera', facebook: 'people', tiktok: 'musical-notes', x: 'chatbubble' };
+const ICONS: Record<string, IconName> = { linkedin: 'briefcase', instagram: 'camera', facebook: 'people', tiktok: 'musical-notes', x: 'chatbubble', youtube: 'logo-youtube', threads: 'at', github: 'logo-github', pinterest: 'logo-pinterest' };
 
 function Avatar({ person }: { person: PersonResult }) {
   const t = useTheme();

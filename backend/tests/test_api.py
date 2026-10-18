@@ -29,7 +29,8 @@ async def test_search_pipeline_with_mock_brave(monkeypatch):
         out = await search_service.search_people(client, "John Smith", None, "brave")
     platforms = {r["platform_key"] for r in out["results"]}
     assert platforms == {"linkedin", "instagram"}
-    assert out["requests_made"] == 6 and out["cost_usd"] == pytest.approx(6 * settings.brave_cost_per_request)
+    n = len(search_service.PLATFORMS)  # a page with fewer than 3 real matches is never followed by another
+    assert out["requests_made"] == n and out["cost_usd"] == pytest.approx(n * settings.brave_cost_per_request)
     assert out["results"][0]["match_score"] >= 0.85
 
 
@@ -53,13 +54,13 @@ def test_placeholder_keys_are_not_configured():
 
 def serper_handler(request: httpx.Request) -> httpx.Response:
     body = json.loads(request.content)
-    if request.url.path == "/images":
-        if "instagram.com/johnsmith" in body["q"]:
-            return httpx.Response(200, json={"images": [
-                {"link": "https://www.instagram.com/johnsmith/p/OTHER/", "thumbnailUrl": "https://img.example/wrong.jpg"},
-                {"link": "https://instagram.com/johnsmith/", "thumbnailUrl": "https://img.example/right.jpg"}]})
-        return httpx.Response(200, json={"images": []})
     q = body["q"]
+    if request.url.path == "/images":
+        if q == '"John Smith" site:instagram.com':
+            return httpx.Response(200, json={"images": [
+                {"title": "post", "link": "https://www.instagram.com/p/OTHER/", "thumbnailUrl": "https://img.example/wrong.jpg"},
+                {"title": "John Smith (@johnsmith) • Instagram", "link": "https://instagram.com/johnsmith/", "thumbnailUrl": "https://img.example/right.jpg"}]})
+        return httpx.Response(200, json={"images": []})
     if "instagram" in q:
         organic = [{"title": "John Smith (@johnsmith) • Instagram", "link": "https://www.instagram.com/johnsmith/", "snippet": "bio"}]
     elif "linkedin" in q:
@@ -69,25 +70,75 @@ def serper_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json={"organic": organic})
 
 
-@pytest.mark.asyncio
-async def test_result_picture_comes_only_from_the_exact_page(monkeypatch):
+@pytest.fixture()
+def serper(monkeypatch):
     monkeypatch.setattr(settings, "serper_api_key", "real-looking-key-123")
-    monkeypatch.setattr(settings, "enable_result_images", True)
-    monkeypatch.setattr(settings, "enable_google_images", True)
-
-    async def no_preview(client, url):
-        return None
-    monkeypatch.setattr(search_service, "preview_image", no_preview)
-    search_cache.clear()
-    async with httpx.AsyncClient(transport=httpx.MockTransport(serper_handler)) as client:
-        out = await search_service.search_people(client, "John Smith", None, "serper")
-    by = {r["platform_key"]: r for r in out["results"]}
-    assert by["instagram"]["image_url"] == "https://img.example/right.jpg"   # same page, not the post
-    assert by["linkedin"]["image_url"] is None                               # no match, no picture
-    assert out["requests_made"] == 6 + 2                                     # 6 searches + 2 picture lookups
-
-    search_cache.clear()
     monkeypatch.setattr(settings, "enable_result_images", False)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(serper_handler)) as client:
-        off = await search_service.search_people(client, "John Smith", None, "serper")
-    assert off["requests_made"] == 6 and all(r["image_url"] is None for r in off["results"])
+    search_cache.clear()
+
+    async def go(handler, name="John Smith"):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await search_service.search_people(client, name, None, "serper")
+    return go
+
+
+@pytest.mark.asyncio
+async def test_result_picture_comes_only_from_the_exact_page(serper, monkeypatch):
+    monkeypatch.setattr(settings, "image_lookups", 0)
+    out = await serper(serper_handler)
+    by = {r["platform_key"]: r for r in out["results"]}
+    assert by["instagram"]["image_url"] == "https://img.example/right.jpg"   # same profile, not the post
+    assert by["linkedin"]["image_url"] is None                               # no match, no picture
+    n = len(search_service.PLATFORMS)
+    assert out["requests_made"] == 2 * n                                     # one results page + one picture page each
+
+
+@pytest.mark.asyncio
+async def test_missing_picture_gets_one_targeted_lookup(serper, monkeypatch):
+    monkeypatch.setattr(settings, "image_lookups", 5)
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content)["q"])
+        return serper_handler(request)
+
+    out = await serper(handler)
+    assert "site:linkedin.com/in/john-smith-1a2b3c4d" in seen                # the profile that had no picture
+    assert not any(q.startswith("site:instagram.com/johnsmith") for q in seen)  # the one that had one is left alone
+    assert out["requests_made"] == 2 * len(search_service.PLATFORMS) + 1
+
+
+@pytest.mark.asyncio
+async def test_pictures_can_be_switched_off(serper, monkeypatch):
+    monkeypatch.setattr(settings, "enable_platform_images", False)
+    out = await serper(serper_handler)
+    assert out["requests_made"] == len(search_service.PLATFORMS)
+    assert all(r["image_url"] is None for r in out["results"])
+
+
+@pytest.mark.asyncio
+async def test_more_pages_only_while_they_keep_matching(serper, monkeypatch):
+    monkeypatch.setattr(settings, "enable_platform_images", False)
+    monkeypatch.setattr(settings, "search_pages", 3)
+    pages = {}
+
+    def handler(request):
+        body = json.loads(request.content)
+        page = body.get("page", 1)
+        if "linkedin" in body["q"]:
+            pages.setdefault("linkedin", []).append(page)
+            # pages 1 and 2 are full of real matches; page 3 is not asked for because the limit is 3 pages
+            organic = [{"title": f"John Smith - Person {page}{i} | LinkedIn", "link": f"https://www.linkedin.com/in/john-smith-{page}{i}",
+                        "snippet": ""} for i in range(4)]
+        elif "instagram" in body["q"]:
+            pages.setdefault("instagram", []).append(page)
+            organic = [{"title": "Somebody Else (@else) • Instagram", "link": "https://www.instagram.com/else/", "snippet": ""}]
+        else:
+            organic = []
+        return httpx.Response(200, json={"organic": organic})
+
+    out = await serper(handler)
+    assert pages["linkedin"] == [1, 2, 3]       # kept finding matches, so it kept going (up to the limit)
+    assert pages["instagram"] == [1]            # nothing matched, so no second page was bought
+    assert len([r for r in out["results"] if r["platform_key"] == "linkedin"]) == 12
+    assert out["requests_made"] == 3 + len(search_service.PLATFORMS) - 1

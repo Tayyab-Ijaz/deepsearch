@@ -61,3 +61,39 @@ def test_labels():
     assert label_for(0.9) == "strong_match"
     assert label_for(0.7) == "possible_match"
     assert label_for(0.5) == "weak_match"
+
+
+def test_new_platform_profiles_are_recognised():
+    from app.services.ranker import classify_url
+    assert classify_url("https://www.youtube.com/@BarackObama/videos") == ("youtube", "@BarackObama".lstrip("@"))
+    assert classify_url("https://www.youtube.com/watch?v=abc") is None
+    assert classify_url("https://www.threads.com/@barackobama") == ("threads", "barackobama")
+    assert classify_url("https://www.threads.net/@x/post/abc") is None
+    assert classify_url("https://github.com/octocat") == ("github", "octocat")
+    assert classify_url("https://github.com/octocat/hello-world") is None
+    assert classify_url("https://github.com/features") is None
+    assert classify_url("https://de.pinterest.com/johnsmith/") == ("pinterest", "johnsmith")
+    assert classify_url("https://www.pinterest.com/pin/123/") is None
+
+
+def test_same_profile_from_two_sources_is_merged_and_keeps_its_picture():
+    hits = [
+        RawHit(title="John Smith - Engineer | LinkedIn", url="https://uk.linkedin.com/in/john-smith-1", snippet="London", position=2),
+        RawHit(title="John Smith | LinkedIn", url="https://www.linkedin.com/in/John-Smith-1/", thumbnail="https://img.example/a.jpg",
+               provider="serper-images", position=100),
+    ]
+    res = rank(hits, "John Smith", limit=10)
+    assert len(res) == 1
+    assert res[0].image_url == "https://img.example/a.jpg" and res[0].description == "London"
+
+
+def test_github_style_title_uses_the_real_name():
+    assert title_to_name("octocat (The Octocat) · GitHub") == "The Octocat"
+
+
+def test_relevant_count_counts_distinct_real_matches():
+    from app.services.ranker import relevant_count
+    hits = [RawHit(title="John Smith | LinkedIn", url="https://www.linkedin.com/in/john-smith-1"),
+            RawHit(title="John Smith | LinkedIn", url="https://uk.linkedin.com/in/john-smith-1"),   # same profile
+            RawHit(title="Jane Roe | LinkedIn", url="https://www.linkedin.com/in/jane-roe")]
+    assert relevant_count(hits, "John Smith", None, "linkedin") == 1

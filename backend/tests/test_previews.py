@@ -73,7 +73,7 @@ async def test_preview_follows_safe_redirect_and_reads_image(monkeypatch):
 async def test_pipeline_uses_page_preview_without_extra_paid_requests(monkeypatch):
     monkeypatch.setattr(settings, "serper_api_key", "real-looking-key-123")
     monkeypatch.setattr(settings, "enable_result_images", True)
-    monkeypatch.setattr(settings, "enable_google_images", False)
+    monkeypatch.setattr(settings, "enable_platform_images", False)
     async def fake(client, url):
         return "https://cdn.example/page.jpg"
     monkeypatch.setattr(search_service, "preview_image", fake)
@@ -81,4 +81,4 @@ async def test_pipeline_uses_page_preview_without_extra_paid_requests(monkeypatc
     async with httpx.AsyncClient(transport=httpx.MockTransport(serper_handler)) as c:
         out = await search_service.search_people(c, "John Smith", None, "serper")
     assert out["results"] and all(r["image_url"] == "https://cdn.example/page.jpg" for r in out["results"])
-    assert out["requests_made"] == 6
+    assert out["requests_made"] == len(search_service.PLATFORMS)   # one results page per platform, nothing extra for pictures

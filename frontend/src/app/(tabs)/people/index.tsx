@@ -10,6 +10,7 @@ import { haptic } from '../../../lib/utils';
 import { type, useTheme } from '../../../theme/theme';
 
 const cut = (value: string, max: number) => value.slice(0, max);
+const PAGE_SIZE = 20;
 
 export default function PeopleScreen() {
   const t = useTheme();
@@ -22,6 +23,7 @@ export default function PeopleScreen() {
   const [results, setResults] = useState<PersonResult[]>([]);
   const [matchFilter, setMatchFilter] = useState<'all' | 'strong_match' | 'possible_match' | 'weak_match'>('all');
   const [platformFilter, setPlatformFilter] = useState('all');
+  const [shown, setShown] = useState(PAGE_SIZE);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -82,6 +84,7 @@ export default function PeopleScreen() {
     setSummaryError(null);
     setMatchFilter('all');
     setPlatformFilter('all');
+    setShown(PAGE_SIZE);
     try {
       const res = await api.post<SearchResponse>('api/search', {
         name: name.trim(),
@@ -178,17 +181,17 @@ export default function PeopleScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingHorizontal: 2 }}>
             {([['all', 'All matches'], ['strong_match', 'Strong'], ['possible_match', 'Possible'], ['weak_match', 'Weak']] as const).map(([value, label]) => {
               const selected = matchFilter === value;
-              return <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => setMatchFilter(value)} style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: selected ? t.accent : t.card, borderWidth: 1, borderColor: selected ? t.accent : t.separator }}><Text style={[type.caption, { color: selected ? (t.dark ? '#111111' : '#FFFFFF') : t.secondary, fontWeight: '600' }]}>{label}</Text></Pressable>;
+              return <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => { setMatchFilter(value); setShown(PAGE_SIZE); }} style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: selected ? t.accent : t.card, borderWidth: 1, borderColor: selected ? t.accent : t.separator }}><Text style={[type.caption, { color: selected ? (t.dark ? '#111111' : '#FFFFFF') : t.secondary, fontWeight: '600' }]}>{label}</Text></Pressable>;
             })}
           </ScrollView>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingHorizontal: 2 }}>
             {['all', ...platforms].map((value) => {
               const selected = platformFilter === value;
               const label = value === 'all' ? 'Every platform' : results.find((result) => result.platform_key === value)?.platform ?? value;
-              return <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => setPlatformFilter(value)} style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: selected ? t.accent : t.card, borderWidth: 1, borderColor: selected ? t.accent : t.separator }}><Text style={[type.caption, { color: selected ? (t.dark ? '#111111' : '#FFFFFF') : t.secondary, fontWeight: '600' }]}>{label}</Text></Pressable>;
+              return <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => { setPlatformFilter(value); setShown(PAGE_SIZE); }} style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: selected ? t.accent : t.card, borderWidth: 1, borderColor: selected ? t.accent : t.separator }}><Text style={[type.caption, { color: selected ? (t.dark ? '#111111' : '#FFFFFF') : t.secondary, fontWeight: '600' }]}>{label}</Text></Pressable>;
             })}
           </ScrollView>
-          {visibleResults.length > 0 ? <View style={{ gap: 10 }}>{visibleResults.map((r) => <PersonRow key={r.profile_url} person={r} saved={savedProfiles.has(r.profile_url)} saving={savingProfile === r.profile_url} onToggleSave={() => void toggleSaved(r)} />)}</View> : <Text style={[type.subhead, { color: t.secondary, textAlign: 'center', paddingVertical: 18 }]}>No profiles match these filters.</Text>}
+          {visibleResults.length > 0 ? <View style={{ gap: 10 }}>{visibleResults.slice(0, shown).map((r) => <PersonRow key={r.profile_url} person={r} saved={savedProfiles.has(r.profile_url)} saving={savingProfile === r.profile_url} onToggleSave={() => void toggleSaved(r)} />)}{visibleResults.length > shown ? <TextAction title={`Show more (${visibleResults.length - shown} left)`} icon="chevron-down-outline" onPress={() => setShown((n) => n + PAGE_SIZE)} /> : null}</View> : <Text style={[type.subhead, { color: t.secondary, textAlign: 'center', paddingVertical: 18 }]}>No profiles match these filters.</Text>}
           <Text style={[type.footnote, { color: t.secondary, marginHorizontal: 16, marginTop: 2 }]}>Name match only. A matching name does not confirm it is the same person.</Text>
           {saveError ? <ErrorText message={saveError} /> : null}
         </View>

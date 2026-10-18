@@ -35,17 +35,24 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
 
-    # Show each result's own preview picture (the page's og:image). Free: no search credits are used.
+    # Pictures: Google Images is searched once per platform (not once per result) and matched to each profile's
+    # own page, so a picture is only ever the one that page shows.
+    enable_platform_images: bool = True
+    # Fill remaining gaps with the page's own preview picture (og:image). Free: no search credits are used.
     enable_result_images: bool = True
-    # Also ask Google Images when a page has no preview picture. Costs one Serper request per result and is
-    # often not the profile photo, so it is off by default.
-    enable_google_images: bool = False
+    # Depth. A platform asks for another page only while the last one still held real name matches, so common
+    # names go deep and unusual names stop early. One page is one provider request.
+    search_pages: int = 3
+    image_pages: int = 2
+    search_concurrency: int = 16
+    # Profiles still without a picture after everything above get one targeted Google Images lookup each (1 request).
+    image_lookups: int = 10
     daily_search_limit: int = 40
     daily_summary_limit: int = 40
     cache_ttl_seconds: int = 900
     request_timeout: float = 8.0
-    # Keep enough ranked hits to show several real profiles from each platform.
-    results_limit: int = 30
+    # The most ranked profiles one search returns.
+    results_limit: int = 80
 
     @property
     def has_brave(self) -> bool:
