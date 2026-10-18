@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     access_token_minutes: int = 60
     refresh_token_days: int = 30
 
+    # Password-reset emails go through Resend (https://resend.com). The sender must be on a domain verified there.
+    resend_api_key: str = ""
+    email_from: str = "DeepSearch AI <info@wellminddatasolutions.com>"
+    reset_code_minutes: int = 15
+
     search_provider: str = "auto"
     brave_api_key: str = ""
     serper_api_key: str = ""
@@ -57,6 +62,10 @@ class Settings(BaseSettings):
     @property
     def has_brave(self) -> bool:
         return is_set(self.brave_api_key)
+
+    @property
+    def has_email(self) -> bool:
+        return is_set(self.resend_api_key)
 
     @property
     def has_serper(self) -> bool:

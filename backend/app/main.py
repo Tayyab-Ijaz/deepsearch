@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -12,13 +13,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
 from .config import settings
-from .models import (DeleteAccountRequest, LoginRequest, RefreshRequest, RegisterRequest,
-                     SavedPersonRequest, SearchRequest, SummaryRequest, UsernameRequest)
-from .services import accounts, metrics, summarizer, username_prober
+from .models import (DeleteAccountRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest, RegisterRequest,
+                     ResetPasswordRequest, SavedPersonRequest, SearchRequest, SummaryRequest, UsernameRequest)
+from .services import accounts, mailer, metrics, summarizer, username_prober
 from .services.accounts import AuthError
 from .services.providers import ProviderError
 from .services.search_service import search_people
 
+log = logging.getLogger(__name__)
 CONSENT_MESSAGE = "Please confirm you are searching for yourself, someone who agreed, or a well-known public figure."
 bearer = HTTPBearer(auto_error=False)
 
@@ -72,8 +74,10 @@ async def validation_handler(_: Request, e: RequestValidationError):
 def current_user_id(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> int:
     if cred is None:
         raise AuthError("Please sign in.")
-    user_id = accounts.read_access_token(cred.credentials)
-    if accounts.get_user(user_id) is None:
+    user_id, password_version = accounts.read_access_claims(cred.credentials)
+    user = accounts.get_user(user_id)
+    # A password reset signs out every session that started before it.
+    if user is None or password_version != int(user.get("password_changed_at", 0)):
         raise AuthError("Please sign in again.")
     return user_id
 
@@ -118,6 +122,47 @@ def login(req: LoginRequest, request: Request):
         raise
     accounts.clear_failures(key)
     return out
+
+
+RESET_MIN_SECONDS = 1.2
+RESET_REQUESTED = "If an account exists for that email, we have sent a 6-digit code. It expires in a few minutes."
+
+
+def _pad(started: float, seconds: float) -> None:
+    """Take about the same time whether or not the address has an account, so timing reveals nothing."""
+    time.sleep(max(0.0, seconds - (time.perf_counter() - started)))
+
+
+@app.post("/api/auth/forgot-password", status_code=202)
+def forgot_password(req: ForgotPasswordRequest, request: Request):
+    if not mailer.configured():
+        raise HTTPException(503, "Password reset is not available right now. Please contact support.")
+    started = time.perf_counter()
+    ip_key, email_key = f"forgot:{_ip(request)}", f"forgot-email:{req.email}"
+    accounts.check_rate(ip_key, 10)
+    accounts.check_rate(email_key, 3)
+    accounts.note_failure(ip_key)      # every request counts, so this cannot be used to flood anyone with emails
+    accounts.note_failure(email_key)
+    code = accounts.start_password_reset(req.email)
+    if code:
+        try:
+            mailer.send_reset_code(req.email, code, settings.reset_code_minutes)
+        except mailer.MailError:
+            log.error("Could not send a password reset email")  # the caller still gets the same answer
+    _pad(started, RESET_MIN_SECONDS)
+    return {"detail": RESET_REQUESTED}
+
+
+@app.post("/api/auth/reset-password", status_code=204)
+def reset_password(req: ResetPasswordRequest, request: Request):
+    ip_key, email_key = f"reset:{_ip(request)}", f"reset-email:{req.email}"
+    accounts.check_rate(ip_key, 20)
+    accounts.check_rate(email_key, 10)
+    accounts.note_failure(ip_key)
+    accounts.note_failure(email_key)
+    accounts.finish_password_reset(req.email, req.code, req.new_password)
+    accounts.clear_failures(email_key)
+    accounts.clear_failures(f"login:{_ip(request)}:{req.email}")  # a locked-out user can try the new password straight away
 
 
 @app.post("/api/auth/refresh")

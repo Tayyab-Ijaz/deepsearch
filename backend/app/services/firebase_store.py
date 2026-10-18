@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -97,7 +98,7 @@ def _session(user: dict[str, Any]) -> dict:
     })
     return {
         "user": _public_user(user),
-        "access_token": accounts.make_access_token(int(user["id"])),
+        "access_token": accounts.make_access_token(int(user["id"]), int(user.get("password_changed_at", 0))),
         "refresh_token": refresh_token,
         "expires_in": settings.access_token_minutes * 60,
     }
@@ -143,6 +144,75 @@ def login(email: str, password: str) -> dict:
     if not user or not ok:
         raise AuthError("Email or password is incorrect.")
     return _session(user)
+
+
+RESET_MAX_ATTEMPTS = 5
+
+
+def _reset_ref(email: str):
+    return _db.collection("password_resets").document(_email_id(email))
+
+
+def _reset_code_hash(user_id: int, code: str) -> str:
+    # Keyed with the server secret: a leaked database cannot be used to brute-force the 6 digits offline.
+    from . import accounts
+    return hmac.new(accounts.jwt_secret().encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def start_password_reset(email: str, minutes: int) -> str | None:
+    """Create a one-time code for this address, or None when there is no password account for it."""
+    lookup = _db.collection("email_index").document(_email_id(email)).get()
+    user = _user(int(lookup.to_dict()["user_id"])) if lookup.exists else None
+    if not user or not user.get("password_hash"):
+        return None
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    now = time.time()
+    _reset_ref(email).set({  # replaces any earlier code: only the newest one works
+        "user_id": int(user["id"]), "code_hash": _reset_code_hash(int(user["id"]), code), "attempts": 0,
+        "created_at": now, "expires_at": now + minutes * 60,
+        "delete_after": _firestore_datetime(now + 86400),  # for a Firestore TTL policy on this field
+    })
+    return code
+
+
+def finish_password_reset(email: str, code: str, new_password: str) -> None:
+    """Check the code and set the new password. Every failure looks the same to the caller."""
+    from . import accounts
+    from .accounts import AuthError
+
+    new_hash = accounts.hash_password(new_password)  # same work whether or not the code is right
+    ref = _reset_ref(email)
+    transaction = _db.transaction()
+
+    @_firestore.transactional
+    def attempt(tx):
+        snap = ref.get(transaction=tx)
+        data = snap.to_dict() if snap.exists else None
+        if not data:
+            return None
+        if data["expires_at"] < time.time() or data["attempts"] >= RESET_MAX_ATTEMPTS:
+            tx.delete(ref)
+            return None
+        if not hmac.compare_digest(data["code_hash"], _reset_code_hash(int(data["user_id"]), code)):
+            tx.set(ref, {**data, "attempts": data["attempts"] + 1})
+            return None
+        user_ref = _db.collection("users").document(str(data["user_id"]))
+        user = user_ref.get(transaction=tx)
+        if not user.exists:
+            tx.delete(ref)
+            return None
+        tx.set(user_ref, {**user.to_dict(), "password_hash": new_hash, "password_changed_at": int(time.time())})
+        tx.delete(ref)
+        return int(data["user_id"])
+
+    # Failures are returned, not raised: raising inside a transaction would also undo the attempt counter.
+    user_id = attempt(transaction)
+    if user_id is None:
+        raise AuthError("That code is incorrect or has expired.", 400)
+    batch = _db.batch()
+    for snap in _db.collection("refresh_tokens").where("user_id", "==", user_id).stream():
+        batch.delete(snap.reference)  # every signed-in device has to sign in again
+    batch.commit()
 
 
 def refresh(refresh_token: str) -> dict:

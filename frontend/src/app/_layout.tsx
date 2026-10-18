@@ -78,6 +78,7 @@ function Navigator() {
         </Stack.Protected>
         <Stack.Protected guard={status === 'signedOut'}>
           <Stack.Screen name="sign-in" />
+          <Stack.Screen name="forgot-password" />
         </Stack.Protected>
       </Stack>
     </>

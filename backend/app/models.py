@@ -83,6 +83,31 @@ class RegisterRequest(BaseModel):
         return v or None
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def email_ok(cls, v):
+        v = v.strip().lower()
+        if not EMAIL_RE.match(v):
+            raise ValueError("Enter a valid email address.")
+        return v
+
+
+class ResetPasswordRequest(ForgotPasswordRequest):
+    code: str = Field(min_length=6, max_length=6)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("code")
+    @classmethod
+    def digits(cls, v):
+        v = v.strip()
+        if not re.fullmatch(r"\d{6}", v):
+            raise ValueError("Enter the 6-digit code from the email.")
+        return v
+
+
 class LoginRequest(BaseModel):
     email: str = Field(max_length=254)
     password: str = Field(min_length=1, max_length=128)

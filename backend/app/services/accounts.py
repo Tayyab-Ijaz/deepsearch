@@ -53,22 +53,28 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(digest, expected)
 
 
-def make_access_token(user_id: int) -> str:
+def make_access_token(user_id: int, password_version: int = 0) -> str:
+    """`pv` ties the token to the password it was issued under; a password reset changes it and so ends old sessions."""
     now = int(time.time())
-    return jwt.encode({"sub": str(user_id), "iat": now, "exp": now + settings.access_token_minutes * 60, "typ": "access"},
-                      jwt_secret(), algorithm="HS256")
+    return jwt.encode({"sub": str(user_id), "iat": now, "exp": now + settings.access_token_minutes * 60, "typ": "access",
+                       "pv": int(password_version)}, jwt_secret(), algorithm="HS256")
 
 
-def read_access_token(token: str) -> int:
+def read_access_claims(token: str) -> tuple[int, int]:
+    """(user id, password version the token was issued under)."""
     try:
         data = jwt.decode(token, jwt_secret(), algorithms=["HS256"], options={"require": ["exp", "sub"]})
         if data.get("typ") != "access":
             raise AuthError("Invalid session.")
-        return int(data["sub"])
+        return int(data["sub"]), int(data.get("pv", 0))
     except jwt.ExpiredSignatureError:
         raise AuthError("Session expired.")
     except (jwt.InvalidTokenError, ValueError):
         raise AuthError("Invalid session.")
+
+
+def read_access_token(token: str) -> int:
+    return read_access_claims(token)[0]
 
 
 def public_user(user: dict[str, Any] | None) -> dict | None:
@@ -86,6 +92,16 @@ def register(email: str, password: str, display_name: str | None) -> dict:
 def login(email: str, password: str) -> dict:
     from . import firebase_store
     return firebase_store.login(email, password)
+
+
+def start_password_reset(email: str) -> str | None:
+    from . import firebase_store
+    return firebase_store.start_password_reset(email, settings.reset_code_minutes)
+
+
+def finish_password_reset(email: str, code: str, new_password: str) -> None:
+    from . import firebase_store
+    firebase_store.finish_password_reset(email, code, new_password)
 
 
 def save_person(user_id: int, person: dict[str, Any]) -> dict[str, Any]:
@@ -137,9 +153,9 @@ def spend(user_id: int, kind: str, limit: int) -> None:
 WINDOW, MAX_FAILS = 15 * 60, 8
 
 
-def check_rate(key: str) -> None:
+def check_rate(key: str, limit: int = MAX_FAILS) -> None:
     from . import firebase_store
-    if firebase_store.rate_count(key, WINDOW) >= MAX_FAILS:
+    if firebase_store.rate_count(key, WINDOW) >= limit:
         raise AuthError("Too many attempts. Try again in a few minutes.", 429)
 
 

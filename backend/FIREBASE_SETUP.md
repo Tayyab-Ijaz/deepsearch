@@ -21,5 +21,15 @@ Do not paste the service-account JSON or private keys into chat or commit them. 
 1. Import the repository (`main` branch) and set the project **Root Directory** to `backend`. Vercel finds `app/main.py` automatically; `vercel.json` sets a 60 second function limit and `.python-version` selects Python 3.12.
 2. Under **Project Settings → Environment Variables**, add the values from `.env.example` (see `.env.vercel` for a ready list). Put `FIREBASE_CREDENTIALS` as the service-account JSON on a single line. Leave `CORS_ORIGINS` empty and `DEBUG=false` for an iOS-only app.
 3. Deploy, then open `https://<your-project>.vercel.app/api/health`. Set the same address (https) as `EXPO_PUBLIC_API_URL` in the EAS build environment.
-4. In Firebase Console → Firestore → **TTL**, add a policy on collection `rate_limits` for field `expires_at` so login-attempt records clean themselves up.
+4. In Firebase Console → Firestore → **TTL**, add two policies so short-lived records clean themselves up: collection `rate_limits` field `expires_at`, and collection `password_resets` field `delete_after`.
 5. Deploy `firestore.rules` (they deny all direct client access; the API uses the Admin SDK).
+
+## Password reset email
+
+Forgot-password sends a 6-digit code by email through [Resend](https://resend.com).
+
+1. Create a Resend account, add and verify the domain `wellminddatasolutions.com` (a few DNS records).
+2. Create an API key and add it in Vercel as `RESEND_API_KEY`. The sender is `EMAIL_FROM` (default `DeepSearch AI <info@wellminddatasolutions.com>`; set it to `contact@…` if you prefer).
+3. Redeploy. Until the key is set, the app's reset request answers "not available right now" instead of failing silently.
+
+Codes expire after 15 minutes, work once, lock after 5 wrong tries, and are stored only as keyed hashes in the `password_resets` collection. A successful reset signs out every other device.

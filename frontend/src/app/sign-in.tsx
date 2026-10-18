@@ -139,6 +139,16 @@ export default function SignIn() {
           </View>
         </Group>
 
+        {mode === 'signIn' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/forgot-password', params: { email: email.trim() } })}
+            hitSlop={8}
+            style={{ alignSelf: 'flex-end', paddingVertical: 10, paddingHorizontal: 4 }}>
+            <Text style={[type.footnote, { color: t.accent, fontWeight: '600' }]}>Forgot password?</Text>
+          </Pressable>
+        ) : null}
+
         {error ? (
           <View style={{ marginTop: 16 }}>
             <ErrorText message={error} />
