@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+secrets/
+tests/
+eval/
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv/
+app/data/*.db
+check_images.py
+run.bat
+run.sh
+Dockerfile

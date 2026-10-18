@@ -1,0 +1,63 @@
+from app.services.ranker import RawHit, canonical, classify_url, label_for, name_similarity, rank, title_to_name
+
+
+def test_title_to_name():
+    assert title_to_name("John Smith (@johnsmith) • Instagram photos and videos") == "John Smith"
+    assert title_to_name("John Smith - Engineer - Acme | LinkedIn") == "John Smith"
+    assert title_to_name("John Smith | Facebook") == "John Smith"
+
+
+def test_similarity_orders_sensibly():
+    exact = name_similarity("John Smith", "John Smith")
+    close = name_similarity("John Smith", "Jonathan Smith")
+    far = name_similarity("John Smith", "Maria Garcia")
+    assert exact > close > far
+    assert exact >= 0.99 and far < 0.5
+
+
+def test_initials_match():
+    assert name_similarity("J Smith", "John Smith") >= 0.85
+
+
+def test_non_latin_names():
+    assert name_similarity("محمد علي", "محمد علي") >= 0.99
+    assert name_similarity("أحمد", "فاطمة") < 0.5
+
+
+def test_classify_urls():
+    assert classify_url("https://www.linkedin.com/in/john-smith-1a2b3c4d")[0] == "linkedin"
+    assert classify_url("https://www.instagram.com/johnsmith/")[0] == "instagram"
+    assert classify_url("https://www.instagram.com/p/AbC123/") is None
+    assert classify_url("https://www.instagram.com/reel/AbC123/") is None
+    assert classify_url("https://www.facebook.com/groups/12345") is None
+    assert classify_url("https://x.com/home") is None
+    assert classify_url("https://x.com/johnsmith")[0] == "x"
+    assert classify_url("https://www.tiktok.com/@john.smith")[0] == "tiktok"
+    assert classify_url("https://www.tiktok.com/discover/john") is None
+    assert classify_url("https://johnsmith.dev/about")[0] == "web"
+    assert classify_url("javascript:alert(1)") is None
+
+
+def test_canonical_dedupes():
+    assert canonical("https://www.instagram.com/JohnSmith/") == canonical("https://instagram.com/johnsmith")
+
+
+def test_rank_drops_junk_and_never_invents():
+    hits = [
+        RawHit("John Smith - Engineer | LinkedIn", "https://www.linkedin.com/in/john-smith-1a2b3c4d", "NYC", provider="brave"),
+        RawHit("John Smith (@johnsmith) • Instagram photos", "https://www.instagram.com/johnsmith/", "bio", provider="brave"),
+        RawHit("Post by someone", "https://www.instagram.com/p/XyZ/", "", provider="brave"),
+        RawHit("Totally Different Person | LinkedIn", "https://www.linkedin.com/in/other-person-99887766", "", provider="brave"),
+        RawHit("John Smith duplicate", "https://instagram.com/johnsmith", "", provider="brave"),
+    ]
+    res = rank(hits, "John Smith", limit=5)
+    urls = [r.profile_url for r in res]
+    assert len(res) == 2  # fewer than 5 is fine: nothing is invented to fill the list
+    assert not any("/p/" in u for u in urls)
+    assert all(r.match_label in ("strong_match", "possible_match", "weak_match") for r in res)
+
+
+def test_labels():
+    assert label_for(0.9) == "strong_match"
+    assert label_for(0.7) == "possible_match"
+    assert label_for(0.5) == "weak_match"

@@ -1,0 +1,4 @@
+name,name_type,expected_url_contains
+REPLACE_WITH_CONSENTING_PERSON_OR_PUBLIC_FIGURE,common,linkedin.com/in/their-handle
+REPLACE_WITH_ANOTHER_NAME,rare,instagram.com/their.handle
+REPLACE_WITH_INITIALS_NAME,initials,x.com/theirhandle

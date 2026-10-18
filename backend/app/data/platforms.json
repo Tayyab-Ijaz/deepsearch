@@ -1,0 +1,17 @@
+[
+  {"key": "github", "name": "GitHub", "url": "https://github.com/{u}", "check": "status", "notes": "Public profile URL returns 404 when missing."},
+  {"key": "gitlab", "name": "GitLab", "url": "https://gitlab.com/api/v4/users?username={u}", "check": "json_nonempty", "notes": "Public API returns an empty list when missing."},
+  {"key": "reddit", "name": "Reddit", "url": "https://www.reddit.com/user/{u}/about.json", "check": "status", "notes": "Often rate-limited or blocked from cloud servers."},
+  {"key": "hackernews", "name": "Hacker News", "url": "https://hacker-news.firebaseio.com/v0/user/{u}.json", "check": "json_not_null", "notes": "Returns null when the user does not exist."},
+  {"key": "devto", "name": "DEV Community", "url": "https://dev.to/{u}", "check": "status", "notes": ""},
+  {"key": "medium", "name": "Medium", "url": "https://medium.com/@{u}", "check": "status", "notes": ""},
+  {"key": "pinterest", "name": "Pinterest", "url": "https://www.pinterest.com/{u}/", "check": "status", "notes": ""},
+  {"key": "behance", "name": "Behance", "url": "https://www.behance.net/{u}", "check": "status", "notes": ""},
+  {"key": "dribbble", "name": "Dribbble", "url": "https://dribbble.com/{u}", "check": "status", "notes": ""},
+  {"key": "soundcloud", "name": "SoundCloud", "url": "https://soundcloud.com/{u}", "check": "status", "notes": ""},
+  {"key": "steam", "name": "Steam", "url": "https://steamcommunity.com/id/{u}", "check": "absent_text", "absent": "The specified profile could not be found", "notes": "Custom profile URL only."},
+  {"key": "keybase", "name": "Keybase", "url": "https://keybase.io/{u}", "check": "status", "notes": ""},
+  {"key": "instagram", "name": "Instagram", "url": "https://www.instagram.com/{u}/", "check": "status", "experimental": true, "notes": "Usually shows a login wall for every name, so it is often unreliable. The self-test measures this."},
+  {"key": "tiktok", "name": "TikTok", "url": "https://www.tiktok.com/@{u}", "check": "status", "experimental": true, "notes": "Often blocks automated checks."},
+  {"key": "x", "name": "X", "url": "https://x.com/{u}", "check": "status", "experimental": true, "notes": "Needs JavaScript, so a plain request usually cannot tell."}
+]

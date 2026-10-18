@@ -1,0 +1,40 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+env.vercel
+**/env.vercel
+**/secrets/
+**/*service-account*.json
+**/firebase-adminsdk-*.json
+.vercel/
+
+# Frontend / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local databases and generated evaluation output
+backend/app/data/*.db
+backend/eval/out/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
